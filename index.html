@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SplitSync - Login & Register</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: url(./ASSETS/bg.jpg);
+            background-position: center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+            background-size: cover;
+            width: auto;
+            height: auto;
+        }
+
+        #loaderOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            font-size: 1.5rem;
+            display: none;
+        }
+    </style>
+</head>
+
+<body class="bg-light">
+
+    <div id="loaderOverlay">Loading...</div>
+
+    <div class="container d-flex justify-content-center align-items-center min-vh-100">
+        <div class="card shadow-lg p-4 rounded-4" style="width: 400px;">
+            <h2 class="text-center mb-4">SplitSync</h2>
+
+            <ul class="nav nav-pills nav-justified mb-3">
+                <li class="nav-item">
+                    <button class="nav-link active" id="login-tab" data-bs-toggle="pill" data-bs-target="#login"
+                        type="button">Login</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" id="register-tab" data-bs-toggle="pill" data-bs-target="#register"
+                        type="button">Register</button>
+                </li>
+            </ul>
+
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="login">
+                    <form id="loginForm" novalidate>
+                        <div class="mb-3">
+                            <label for="loginEmail" class="form-label">Email address</label>
+                            <input type="email" class="form-control" id="loginEmail" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="loginPassword" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="loginPassword" minlength="6" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Login</button>
+                    </form>
+                </div>
+
+                <div class="tab-pane fade" id="register">
+                    <form id="registerForm" novalidate>
+                        <div class="mb-3">
+                            <label for="fullName" class="form-label">Full Name</label>
+                            <input type="text" class="form-control" id="fullName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="registerEmail" class="form-label">Email address</label>
+                            <input type="email" class="form-control" id="registerEmail" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="phone" class="form-label">Phone Number</label>
+                            <input type="tel" class="form-control" id="phone" pattern="^[0-9]{10}$" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="registerPassword" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="registerPassword" minlength="6" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirmPassword" class="form-label">Confirm Password</label>
+                            <input type="password" class="form-control" id="confirmPassword" required>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">Register</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script type="module">
+        // ---------------- Firebase Imports ----------------
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import {
+            getAuth,
+            onAuthStateChanged,
+            signOut,
+            signInWithEmailAndPassword,
+            createUserWithEmailAndPassword
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getDatabase, ref, set, get, child } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+        // ---------------- Firebase Config ----------------
+        const firebaseConfig = {
+            apiKey: "AIzaSyDdRLOQgTvlsh18PYAgrlS48TA2r_CvXS8",
+            authDomain: "splitsync-e5675.firebaseapp.com",
+            databaseURL: "https://splitsync-e5675-default-rtdb.firebaseio.com",
+            projectId: "splitsync-e5675",
+            storageBucket: "splitsync-e5675.firebasestorage.app",
+            messagingSenderId: "882841710347",
+            appId: "1:882841710347:web:4b9e381450956c92a03c0e",
+            measurementId: "G-VJ2PQ1ZV1N"
+        };
+
+        // ---------------- Initialize Firebase ----------------
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+
+        // ---------------- DOM Elements ----------------
+        const loader = document.getElementById("loaderOverlay");
+        const loginForm = document.getElementById("loginForm");
+        const registerForm = document.getElementById("registerForm");
+
+        // ---------------- Loader Functions ----------------
+        const showLoader = () => loader && (loader.style.display = "flex");
+        const hideLoader = () => loader && (loader.style.display = "none");
+
+        // ---------------- Auto Redirect if Already Logged In ----------------
+        onAuthStateChanged(auth, (user) => {
+            if (user && !window.location.href.includes("index.html")) {
+                // Only redirect if not on login/register page
+                window.location.href = "user_home_page.html";
+            }
+        });
+
+        // ---------------- Register ----------------
+        registerForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            showLoader();
+
+            const fullName = document.getElementById("fullName").value.trim();
+            const email = document.getElementById("registerEmail").value.trim();
+            const phone = document.getElementById("phone").value.trim();
+            const password = document.getElementById("registerPassword").value;
+            const confirmPassword = document.getElementById("confirmPassword").value;
+
+            // ---------------- Validation ----------------
+            if (!fullName || !email || !phone || !password || !confirmPassword) {
+                alert("Please fill in all fields.");
+                hideLoader();
+                return;
+            }
+            if (password !== confirmPassword) {
+                alert("Passwords do not match.");
+                hideLoader();
+                return;
+            }
+            if (password.length < 6) {
+                alert("Password must be at least 6 characters.");
+                hideLoader();
+                return;
+            }
+            if (!/^[0-9]{10}$/.test(phone)) {
+                alert("Enter a valid 10-digit phone number.");
+                hideLoader();
+                return;
+            }
+
+            try {
+                // Create user in Firebase Auth
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+
+                // Store extra user details in Realtime Database
+                await set(ref(db, "User_Registration/" + user.uid), {
+                    Name: fullName,
+                    Email: email,
+                    PhoneNumber: phone
+                });
+
+                alert("Registration successful 🎉 Please login now.");
+                registerForm.reset();
+
+                // Sign out immediately so user stays on login page
+                await signOut(auth);
+
+                // Switch to login tab automatically
+                document.getElementById("login-tab").click();
+
+            } catch (error) {
+                console.error(error.message);
+                alert("Error: " + error.message);
+            } finally {
+                hideLoader();
+            }
+        });
+
+        // ---------------- Login ----------------
+        loginForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            showLoader();
+
+            const email = document.getElementById("loginEmail").value.trim();
+            const password = document.getElementById("loginPassword").value;
+
+            if (!email || !password) {
+                alert("Please fill in all fields.");
+                hideLoader();
+                return;
+            }
+
+            try {
+                // Sign in user
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+
+                // Fetch user data from Realtime Database
+                const snapshot = await get(child(ref(db), "User_Registration/" + user.uid));
+                const userName = snapshot.exists() ? snapshot.val().Name : "";
+
+                alert("Login successful ✅ Welcome " + userName);
+
+                loginForm.reset();
+
+                // Redirect to home page
+                window.location.href = "user_home_page.html";
+
+            } catch (error) {
+                console.error(error.message);
+                alert("Error: " + error.message);
+            } finally {
+                hideLoader();
+            }
+        });
+    </script>
+
+
+
+</body>
+
+</html>

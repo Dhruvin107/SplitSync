@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Add Expense - SplitSync</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css"
+    integrity="sha512-DxV+EoADOkOygM4IR9yXP8Sb2qwgidEmeqAEmDKIOfPRQZOWbXCzLC6vjbZyy0vPisbH2SyW27+ddLVCN+OMzQ=="
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="./CSS/add_expense_page.css">
+</head>
+
+<body>
+  <div class="container-fluid">
+    <div class="row">
+      <aside class="col-md-3 col-lg-2 sidebar">
+        <h4 class="fw-bold text-center">SplitSync</h4>
+        <a href="./user_home_page.html">Dashboard</a>
+        <a href="./user_create_team_page.html">Create / Join Team</a>
+        <a href="./user_team_details.html">Team Details</a>
+        <a href="#">Add Expense</a>
+        <a href="./user_expense_list_page.html">Expense List</a>
+        <a href="#" id="logoutBtn">Logout</a>
+      </aside>
+      <main class="col-md-9 col-lg-10 content">
+        <div class="card-form">
+          <h3>Add Expense</h3>
+          <div class="mb-3">
+            <input type="text" id="expenseName" class="form-control" placeholder="Expense Name">
+          </div>
+          <div class="mb-3">
+            <input type="number" id="amount" class="form-control" placeholder="Amount">
+          </div>
+          <div class="mb-3">
+            <input type="datetime-local" id="dateTime" class="form-control">
+          </div>
+          <div class="mb-3">
+            <input type="text" id="note" class="form-control" placeholder="Note">
+          </div>
+          <div class="mb-3">
+            <select id="type" class="form-select">
+              <option value="">Select Type</option>
+              <option value="personal">Personal</option>
+              <option value="shared">Shared</option>
+            </select>
+          </div>
+          <button id="addBtn" class="btn btn-primary w-100">Add Expense</button>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="./js/add_expense_page.js"></script>
+  <script src="./JS/config.js"></script>
+
+  <script type="module">
+    // ---------------- Firebase Imports ----------------
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getDatabase, ref, push, set, get, child } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    // ---------------- Firebase Config ----------------
+    const firebaseConfig = {
+      apiKey: "AIzaSyDdRLOQgTvlsh18PYAgrlS48TA2r_CvXS8",
+      authDomain: "splitsync-e5675.firebaseapp.com",
+      databaseURL: "https://splitsync-e5675-default-rtdb.firebaseio.com",
+      projectId: "splitsync-e5675",
+      storageBucket: "splitsync-e5675.firebasestorage.app",
+      messagingSenderId: "882841710347",
+      appId: "1:882841710347:web:4b9e381450956c92a03c0e",
+      measurementId: "G-VJ2PQ1ZV1N"
+    };
+
+    // ---------------- Initialize Firebase ----------------
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+
+    // ---------------- DOM Elements ----------------
+    const expenseName = document.getElementById("expenseName");
+    const amount = document.getElementById("amount");
+    const dateTime = document.getElementById("dateTime");
+    const note = document.getElementById("note");
+    const type = document.getElementById("type");
+    const addBtn = document.getElementById("addBtn");
+
+    // ---------------- Current User & Team ----------------
+    let currentUser = null;
+    let currentTeamCode = null;
+    let currentUserName = null;  // ✅ store name here
+
+    // ---------------- Fetch Team Code ----------------
+    async function getUserTeam(uid) {
+      // 1️⃣ First check User_Registration
+      const userSnap = await get(child(ref(db), `User_Registration/${uid}`));
+      if (userSnap.exists()) {
+        const userData = userSnap.val();
+
+        // ✅ store user name globally
+        if (userData.Name) {
+          currentUserName = userData.Name;
+        }
+
+        if (userData.TeamCode) {
+          return userData.TeamCode;
+        }
+      }
+
+      // 2️⃣ If not found, check in Team_Details where user is leader/member
+      const teamsSnap = await get(ref(db, "Team_Details"));
+      if (teamsSnap.exists()) {
+        const teams = teamsSnap.val();
+        for (const [teamCode, teamData] of Object.entries(teams)) {
+          if (teamData.Members && teamData.Members[uid]) {
+            return teamCode;
+          }
+        }
+      }
+      return null;
+    }
+
+    // ---------------- Auth Check ----------------
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        currentUser = user;
+        currentTeamCode = await getUserTeam(user.uid);
+
+        if (!currentTeamCode) {
+          alert("⚠️ You are not in any team. Please join/create a team first.");
+          window.location.href = "user_create_team_page.html";
+        }
+      } else {
+        window.location.href = "index.html";
+      }
+    });
+
+    // ---------------- Add Expense ----------------
+    addBtn.addEventListener("click", async () => {
+      const expName = expenseName.value.trim();
+      const expAmount = parseFloat(amount.value);
+      const expDateTime = dateTime.value;
+      const expNote = note.value.trim();
+      const expType = type.value;
+
+      if (!expName || !expAmount || !expDateTime || !expType) {
+        alert("⚠️ Please fill all required fields.");
+        return;
+      }
+
+      try {
+        const expenseRef = push(ref(db, `Team_Details/${currentTeamCode}/Expenses`));
+        await set(expenseRef, {
+          ExpenseName: expName,
+          Amount: expAmount,
+          DateTime: expDateTime,
+          Note: expNote || "",
+          Type: expType,
+          AddedBy: currentUserName || "Unknown"   // ✅ now always a name
+        });
+
+        alert("✅ Expense added successfully!");
+
+        // Clear fields
+        expenseName.value = "";
+        amount.value = "";
+        dateTime.value = "";
+        note.value = "";
+        type.value = "";
+      } catch (err) {
+        console.error("Error adding expense:", err);
+        alert("❌ Failed to add expense: " + err.message);
+      }
+    });
+
+
+    // ---------------- Logout ----------------
+    document.getElementById("logoutBtn").addEventListener("click", async (e) => {
+      e.preventDefault();
+      try {
+        await signOut(auth);
+        window.location.href = "index.html";
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create Join Team - SplitSync</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css"
+    integrity="sha512-DxV+EoADOkOygM4IR9yXP8Sb2qwgidEmeqAEmDKIOfPRQZOWbXCzLC6vjbZyy0vPisbH2SyW27+ddLVCN+OMzQ=="
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="./CSS/user_create_team_page.css">
+</head>
+
+<body>
+  <div class="container-fluid">
+    <div class="row">
+      <aside class="col-md-3 col-lg-2 sidebar">
+        <h4 class="text-center mb-4 fw-bold">SplitSync</h4>
+        <a href="./user_home_page.html">Dashboard</a>
+        <a href="#">Create / Join Team</a>
+        <a href="./user_team_details.html">Team Details</a>
+        <a href="./add_expense_page.html">Add Expense</a>
+        <a href="./user_expense_list_page.html">Expense List</a>
+        <a href="#" id="logoutBtn">Logout</a>
+      </aside>
+      <main class="col-md-9 col-lg-10 content">
+        <div class="tabs">
+          <a id="create-tab" class="active">Create Team</a>
+          <a id="join-tab">Join Team</a>
+        </div>
+        <div id="create-form" class="card-form">
+          <input type="text" id="teamName" class="form-control" placeholder="Team Name">
+          <input type="text" id="teamDesc" class="form-control" placeholder="Team Descriptions">
+          <input type="number" id="teamMembers" class="form-control" placeholder="Number Of Member">
+          <button id="createBtn" class="btn btn-primary w-100">Create Team</button>
+        </div>
+        <div id="join-form" class="card-form" style="display: none;">
+          <input type="text" id="teamCode" class="form-control" placeholder="Team Code">
+          <button id="joinBtn" class="btn btn-success w-100">Join Team</button>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="./JS/user_create_team_page.js"></script>
+  <script src="./JS/config.js"></script>
+
+  <script type="module">
+    // ---------------- Firebase Imports ----------------
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getDatabase, ref, set, get, child, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    // ---------------- Firebase Config ----------------
+    const firebaseConfig = {
+      apiKey: "AIzaSyDdRLOQgTvlsh18PYAgrlS48TA2r_CvXS8",
+      authDomain: "splitsync-e5675.firebaseapp.com",
+      databaseURL: "https://splitsync-e5675-default-rtdb.firebaseio.com",
+      projectId: "splitsync-e5675",
+      storageBucket: "splitsync-e5675.firebasestorage.app",
+      messagingSenderId: "882841710347",
+      appId: "1:882841710347:web:4b9e381450956c92a03c0e",
+      measurementId: "G-VJ2PQ1ZV1N"
+    };
+
+    // ---------------- Initialize Firebase ----------------
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+
+    // ---------------- Loader ----------------
+    const loaderOverlay = document.createElement('div');
+    loaderOverlay.innerHTML = `
+  <div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.8);display:flex;align-items:center;justify-content:center;z-index:9999;display:none;">
+    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+  </div>`;
+    document.body.appendChild(loaderOverlay);
+    const showLoader = () => loaderOverlay.style.display = "flex";
+    const hideLoader = () => loaderOverlay.style.display = "none";
+
+    // ---------------- DOM Elements ----------------
+    const createTab = document.getElementById("create-tab");
+    const joinTab = document.getElementById("join-tab");
+    const createForm = document.getElementById("create-form");
+    const joinForm = document.getElementById("join-form");
+
+    const teamNameInput = document.getElementById("teamName");
+    const teamDescInput = document.getElementById("teamDesc");
+    const teamMembersInput = document.getElementById("teamMembers");
+    const createBtn = document.getElementById("createBtn");
+
+    const teamCodeInput = document.getElementById("teamCode");
+    const joinBtn = document.getElementById("joinBtn");
+
+    // Disable buttons until user is loaded
+    createBtn.disabled = true;
+    joinBtn.disabled = true;
+
+    // ---------------- Tab Toggle ----------------
+    createTab.addEventListener("click", () => {
+      createTab.classList.add("active");
+      joinTab.classList.remove("active");
+      createForm.style.display = "block";
+      joinForm.style.display = "none";
+    });
+    joinTab.addEventListener("click", () => {
+      joinTab.classList.add("active");
+      createTab.classList.remove("active");
+      joinForm.style.display = "block";
+      createForm.style.display = "none";
+    });
+
+    // ---------------- Current User ----------------
+    let currentUser = null;
+    let currentUserName = "";
+
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        currentUser = user;
+        try {
+          const snapshot = await get(child(ref(db), `User_Registration/${user.uid}`));
+          if (snapshot.exists()) {
+            currentUserName = snapshot.val().Name;
+            createBtn.disabled = false;
+            joinBtn.disabled = false;
+          } else {
+            alert("User registration data not found.");
+            window.location.href = "index.html";
+          }
+        } catch (err) {
+          console.error(err);
+          alert("Error fetching user data.");
+        }
+      } else {
+        window.location.href = "index.html";
+      }
+    });
+
+    // ---------------- Generate Unique 6-digit Code ----------------
+    async function generateUniqueCode() {
+      let code;
+      let exists = true;
+      while (exists) {
+        code = Math.floor(100000 + Math.random() * 900000).toString();
+        const snapshot = await get(child(ref(db), `Team_Details/${code}`));
+        if (!snapshot.exists()) exists = false;
+      }
+      return code;
+    }
+
+    // ---------------- Create Team ----------------
+    createBtn.addEventListener("click", async () => {
+      const name = teamNameInput.value.trim();
+      const desc = teamDescInput.value.trim();
+      const totalMembers = parseInt(teamMembersInput.value);
+
+      if (!name || !desc || !totalMembers || totalMembers < 1) {
+        alert("Please fill all fields correctly.");
+        return;
+      }
+
+      showLoader();
+      try {
+        const teamCode = await generateUniqueCode();
+        const teamRef = ref(db, `Team_Details/${teamCode}`);
+
+        // Save team in Realtime Database
+        await set(teamRef, {
+          TeamName: name,
+          TeamDesc: desc,
+          TotalMembers: totalMembers,
+          Members: {
+            [currentUser.uid]: currentUserName
+          }
+        });
+
+        alert(`Team Created Successfully!\nTeam Code: ${teamCode}`);
+
+        window.location.href = "add_expense_page.html";
+
+        // Reset inputs
+        teamNameInput.value = "";
+        teamDescInput.value = "";
+        teamMembersInput.value = "";
+
+        // Show code on page
+        const codeDiv = document.createElement("div");
+        codeDiv.innerHTML = `<p><strong>Team Code:</strong> ${teamCode}</p>`;
+        createForm.appendChild(codeDiv);
+
+      } catch (err) {
+        console.error("Create team error:", err);
+        alert("Error creating team: " + err.message);
+      } finally {
+        hideLoader();
+      }
+    });
+
+    // ---------------- Join Team ----------------
+    joinBtn.addEventListener("click", async () => {
+      const code = teamCodeInput.value.trim();
+      if (!/^\d{6}$/.test(code)) {
+        alert("Enter a valid 6-digit team code.");
+        return;
+      }
+
+      showLoader();
+      try {
+        const teamRef = ref(db, `Team_Details/${code}`);
+        const snapshot = await get(teamRef);
+
+        if (!snapshot.exists()) {
+          alert("Team not found!");
+          return;
+        }
+
+        const teamData = snapshot.val();
+        const members = teamData.Members || {};
+        const currentMemberCount = Object.keys(members).length;
+
+        // Check if team is full
+        if (currentMemberCount >= teamData.TotalMembers) {
+          alert(`Team "${teamData.TeamName}" is already full! (${teamData.TotalMembers} members allowed)`);
+          return;
+        }
+
+        if (members[currentUser.uid]) {
+          alert("You are already a member of this team.");
+          return;
+        }
+
+        // Add current user to team
+        members[currentUser.uid] = currentUserName;
+        await update(teamRef, { Members: members });
+
+        alert(`Successfully joined team: ${teamData.TeamName}`);
+        teamCodeInput.value = "";
+        window.location.href = "add_expense_page.html";
+
+      } catch (err) {
+        console.error("Join team error:", err);
+        alert("Error joining team: " + err.message);
+      } finally {
+        hideLoader();
+      }
+    });
+
+    // ---------------- Logout ----------------
+    document.getElementById("logoutBtn").addEventListener("click", async (e) => {
+      e.preventDefault();
+      try {
+        await signOut(auth);
+        window.location.href = "index.html";
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  </script>
+
+</body>
+
+</html>

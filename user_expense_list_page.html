@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Expense List - SplitSync</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="./CSS/user_expense_list_page.css">
+</head>
+
+<body>
+  <div class="container-fluid">
+    <div class="row">
+      <aside class="col-md-3 col-lg-2 sidebar">
+        <h4 class="fw-bold text-center">SplitSync</h4>
+        <a href="./user_home_page.html">Dashboard</a>
+        <a href="./user_create_team_page.html">Create / Join Team</a>
+        <a href="./user_team_details.html">Team Details</a>
+        <a href="./add_expense_page.html">Add Expense</a>
+        <a href="#">Expense List</a>
+        <a href="#" id="logoutBtn">Logout</a>
+      </aside>
+      <main class="col-md-9 col-lg-10 content">
+
+        <!-- Loader -->
+        <div id="loader" class="text-center my-5">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+          <p class="mt-2">Loading Expenses...</p>
+        </div>
+
+        <!-- Team Name + Sort -->
+        <div class="d-flex justify-content-between align-items-center mb-3 d-none" id="teamHeader">
+          <h3 class="fw-bold" id="teamName">Team</h3>
+          <select class="form-select w-auto" id="sortBy">
+            <option value="date">Sort By Date</option>
+            <option value="amount">Sort By Amount</option>
+            <option value="name">Sort By Name</option>
+          </select>
+        </div>
+
+        <!-- Expense List -->
+        <div class="table-wrapper d-none" id="expenseSection">
+          <h5 class="fw-bold mb-3">Expense List</h5>
+          <div class="table-responsive">
+            <table class="table table-bordered align-middle text-center">
+              <thead class="table-light">
+                <tr>
+                  <th>Date</th>
+                  <th>Expense Name</th>
+                  <th>Amount</th>
+                  <th>Paid By</th>
+                  <th>Type</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="expenseTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Balances -->
+        <div class="table-wrapper d-none" id="balanceSection">
+          <h5 class="fw-bold mb-3">Balances</h5>
+          <table class="table table-bordered text-center">
+            <thead class="table-light">
+              <tr>
+                <th>User</th>
+                <th>Total Paid</th>
+              </tr>
+            </thead>
+            <tbody id="balances"></tbody>
+          </table>
+        </div>
+
+        <!-- Settlements -->
+        <div class="table-wrapper d-none" id="settlementSection">
+          <h5 class="fw-bold mb-3">Settlements</h5>
+          <table class="table table-bordered text-center">
+            <thead class="table-light">
+              <tr>
+                <th>From</th>
+                <th>To</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody id="settlements"></tbody>
+          </table>
+        </div>
+
+        <!-- Contributions -->
+        <div class="table-wrapper d-none" id="contributionSection">
+          <h5 class="fw-bold mb-3">Contributions (Shared Expenses)</h5>
+          <table class="table table-bordered text-center">
+            <thead class="table-light">
+              <tr>
+                <th>Expense</th>
+                <th>Paid By</th>
+                <th>Total Amount</th>
+                <th>Each Share</th>
+              </tr>
+            </thead>
+            <tbody id="contributions"></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="./JS/user_expense_list_page.js"></script>
+  <script src="./JS/config.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDdRLOQgTvlsh18PYAgrlS48TA2r_CvXS8",
+      authDomain: "splitsync-e5675.firebaseapp.com",
+      databaseURL: "https://splitsync-e5675-default-rtdb.firebaseio.com",
+      projectId: "splitsync-e5675",
+      storageBucket: "splitsync-e5675.firebasestorage.app",
+      messagingSenderId: "882841710347",
+      appId: "1:882841710347:web:4b9e381450956c92a03c0e",
+      measurementId: "G-VJ2PQ1ZV1N"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+
+    // DOM elements
+    const expenseTableBody = document.getElementById("expenseTable");
+    const balancesTbody = document.getElementById("balances");
+    const settlementsTbody = document.getElementById("settlements");
+    const contributionsTbody = document.getElementById("contributions");
+
+    const loader = document.getElementById("loader");
+    const teamHeader = document.getElementById("teamHeader");
+    const expenseSection = document.getElementById("expenseSection");
+    const balanceSection = document.getElementById("balanceSection");
+    const settlementSection = document.getElementById("settlementSection");
+    const contributionSection = document.getElementById("contributionSection");
+    const pageTitle = document.getElementById("teamName");
+
+    const fmtDate = iso => {
+      const d = new Date(iso);
+      return isNaN(d) ? iso : d.toLocaleString();
+    };
+
+    // Get user's team code
+    async function getUserTeamCode(uid) {
+      const userSnap = await get(child(ref(db), `User_Registration/${uid}`));
+      if (userSnap.exists() && userSnap.val().TeamCode) return userSnap.val().TeamCode;
+
+      const teamsSnap = await get(ref(db, "Team_Details"));
+      if (!teamsSnap.exists()) return null;
+
+      for (const [code, team] of Object.entries(teamsSnap.val())) {
+        if (team.Members && team.Members[uid]) return code;
+      }
+      return null;
+    }
+
+    // Compute balances and settlements using names
+    function computeBalancesAndSettlements(expenses) {
+      const totalsPaid = {};
+      const contributions = [];
+
+      // Collect unique member names
+      const memberNames = [...new Set(expenses.map(e => e.AddedBy || "Unknown"))];
+
+      memberNames.forEach(name => { totalsPaid[name] = 0; });
+
+      for (const exp of expenses) {
+        const payer = exp.AddedBy || "Unknown";
+        const amount = Number(exp.Amount || 0);
+        totalsPaid[payer] += amount;
+
+        if ((exp.Type || "").toLowerCase() === "shared") {
+          const share = amount / memberNames.length;
+          memberNames.forEach(name => { totalsPaid[name] -= share; });
+          contributions.push({
+            ExpenseName: exp.ExpenseName,
+            PaidBy: payer,
+            Amount: amount,
+            EachShare: share
+          });
+        }
+      }
+
+      // Net balances
+      const netBalances = {};
+      memberNames.forEach(name => { netBalances[name] = totalsPaid[name]; });
+
+      // Compute settlements
+      const creditors = [], debtors = [];
+      memberNames.forEach(name => {
+        const v = Math.round(netBalances[name] * 100) / 100;
+        if (v > 0.005) creditors.push({ name, amount: v });
+        else if (v < -0.005) debtors.push({ name, amount: -v });
+      });
+
+      creditors.sort((a, b) => b.amount - a.amount);
+      debtors.sort((a, b) => b.amount - a.amount);
+
+      const settlements = [];
+      let i = 0, j = 0;
+      while (i < debtors.length && j < creditors.length) {
+        const pay = Math.min(debtors[i].amount, creditors[j].amount);
+        settlements.push({ from: debtors[i].name, to: creditors[j].name, amount: Math.round(pay * 100) / 100 });
+        debtors[i].amount -= pay;
+        creditors[j].amount -= pay;
+        if (debtors[i].amount <= 0.005) i++;
+        if (creditors[j].amount <= 0.005) j++;
+      }
+
+      return { totalsPaid: netBalances, settlements, contributions };
+    }
+
+    // Render functions
+    function renderExpenses(expenses) {
+      expenseTableBody.innerHTML = "";
+      if (!expenses.length) {
+        expenseTableBody.innerHTML = "<tr><td colspan='6'>No expenses yet.</td></tr>";
+        return;
+      }
+      for (const exp of expenses) {
+        const payerName = exp.AddedBy || "Unknown";
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+      <td>${fmtDate(exp.DateTime || "")}</td>
+      <td>${exp.ExpenseName || ""}</td>
+      <td>${Number(exp.Amount || 0).toFixed(2)}</td>
+      <td>${payerName}</td>
+      <td>${(exp.Type || "").charAt(0).toUpperCase() + (exp.Type || "").slice(1)}</td>
+      <td>${exp.Note || ""}</td>
+    `;
+        expenseTableBody.appendChild(tr);
+      }
+    }
+
+    function renderBalances(totalsPaid) {
+      balancesTbody.innerHTML = "";
+      if (!Object.keys(totalsPaid).length) {
+        balancesTbody.innerHTML = "<tr><td colspan='2'>No balances yet.</td></tr>";
+        return;
+      }
+      for (const name in totalsPaid) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${name}</td><td>${totalsPaid[name].toFixed(2)}</td>`;
+        balancesTbody.appendChild(tr);
+      }
+    }
+
+    function renderSettlements(settlements) {
+      settlementsTbody.innerHTML = "";
+      if (!settlements.length) {
+        settlementsTbody.innerHTML = "<tr><td colspan='3'>No settlements required.</td></tr>";
+        return;
+      }
+      for (const s of settlements) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${s.from}</td><td>${s.to}</td><td>${s.amount.toFixed(2)}</td>`;
+        settlementsTbody.appendChild(tr);
+      }
+    }
+
+    function renderContributions(contributions) {
+      contributionsTbody.innerHTML = "";
+      if (!contributions.length) {
+        contributionsTbody.innerHTML = "<tr><td colspan='4'>No shared contributions.</td></tr>";
+        return;
+      }
+      for (const c of contributions) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${c.ExpenseName}</td><td>${c.PaidBy}</td><td>${c.Amount.toFixed(2)}</td><td>${c.EachShare.toFixed(2)}</td>`;
+        contributionsTbody.appendChild(tr);
+      }
+    }
+
+    // Auth check and data fetching
+    onAuthStateChanged(auth, async user => {
+      if (!user) { window.location.href = "index.html"; return; }
+      loader.classList.remove("d-none");
+
+      try {
+        const teamCode = await getUserTeamCode(user.uid);
+        if (!teamCode) {
+          alert("⚠️ You are not in any team.");
+          window.location.href = "user_create_team_page.html";
+          return;
+        }
+
+        const teamSnap = await get(ref(db, `Team_Details/${teamCode}`));
+        if (!teamSnap.exists()) return;
+        const team = teamSnap.val();
+
+        if (team.TeamName) pageTitle.textContent = team.TeamName;
+
+        const expenses = Object.values(team.Expenses || {});
+        renderExpenses(expenses);
+
+        const { totalsPaid, settlements, contributions } = computeBalancesAndSettlements(expenses);
+
+        renderBalances(totalsPaid);
+        renderSettlements(settlements);
+        renderContributions(contributions);
+
+        loader.classList.add("d-none");
+        teamHeader.classList.remove("d-none");
+        expenseSection.classList.remove("d-none");
+        balanceSection.classList.remove("d-none");
+        settlementSection.classList.remove("d-none");
+        contributionSection.classList.remove("d-none");
+
+      } catch (err) {
+        console.error(err);
+        alert("Error loading data: " + err.message);
+      }
+    });
+
+    // Logout
+    document.getElementById("logoutBtn").addEventListener("click", async e => {
+      e.preventDefault();
+      await signOut(auth);
+      window.location.href = "index.html";
+    });
+  </script>
+
+
+
+</body>
+
+</html>

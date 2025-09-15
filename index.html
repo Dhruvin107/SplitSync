@@ -65,10 +65,21 @@
                             <input type="password" class="form-control" id="loginPassword" minlength="6" required>
                         </div>
                         <button type="submit" class="btn btn-primary w-100">Login</button>
-                        <a href="./SplitSync.apk" download="SplitSync.apk"
+                        <button onclick="forceDownload()"
                             class="btn btn-success btn-lg d-block mx-auto text-center fw-bold shadow my-3">
                             Click Here To Download App
-                        </a>
+                        </button>
+
+                        <script>
+                            function forceDownload() {
+                                const link = document.createElement('a');
+                                link.href = './SplitSync.apk';  // Path to your APK
+                                link.download = 'SplitSync.apk'; // File name for download
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                            }
+                        </script>
                     </form>
                 </div>
 
@@ -255,4 +266,3 @@
 </body>
 
 </html>
-

@@ -198,26 +198,31 @@
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
 
-                // Store extra user details in Realtime Database
-                await set(ref(db, "User_Registration/" + user.uid), {
-                    Name: fullName,
-                    Email: email,
-                    PhoneNumber: phone
+                // ✅ Ensure user.uid is ready before saving to DB
+                onAuthStateChanged(auth, async (currentUser) => {
+                    if (currentUser) {
+                        await set(ref(db, "User_Registration/" + currentUser.uid), {
+                            Name: fullName,
+                            Email: email,
+                            PhoneNumber: phone
+                        });
+
+                        alert("Registration successful 🎉 Please login now.");
+                        registerForm.reset();
+
+                        // Sign out immediately so user stays on login page
+                        await signOut(auth);
+
+                        // Switch to login tab automatically
+                        document.getElementById("login-tab").click();
+
+                        hideLoader();
+                    }
                 });
-
-                alert("Registration successful 🎉 Please login now.");
-                registerForm.reset();
-
-                // Sign out immediately so user stays on login page
-                await signOut(auth);
-
-                // Switch to login tab automatically
-                document.getElementById("login-tab").click();
 
             } catch (error) {
                 console.error(error.message);
                 alert("Error: " + error.message);
-            } finally {
                 hideLoader();
             }
         });
@@ -260,6 +265,7 @@
             }
         });
     </script>
+
 
 
 

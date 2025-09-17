@@ -161,71 +161,66 @@
         });
 
         // ---------------- Register ----------------
-        registerForm.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            showLoader();
+registerForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    showLoader();
 
-            const fullName = document.getElementById("fullName").value.trim();
-            const email = document.getElementById("registerEmail").value.trim();
-            const phone = document.getElementById("phone").value.trim();
-            const password = document.getElementById("registerPassword").value;
-            const confirmPassword = document.getElementById("confirmPassword").value;
+    const fullName = document.getElementById("fullName").value.trim();
+    const email = document.getElementById("registerEmail").value.trim();
+    const phone = document.getElementById("phone").value.trim();
+    const password = document.getElementById("registerPassword").value;
+    const confirmPassword = document.getElementById("confirmPassword").value;
 
-            // ---------------- Validation ----------------
-            if (!fullName || !email || !phone || !password || !confirmPassword) {
-                alert("Please fill in all fields.");
-                hideLoader();
-                return;
-            }
-            if (password !== confirmPassword) {
-                alert("Passwords do not match.");
-                hideLoader();
-                return;
-            }
-            if (password.length < 6) {
-                alert("Password must be at least 6 characters.");
-                hideLoader();
-                return;
-            }
-            if (!/^[0-9]{10}$/.test(phone)) {
-                alert("Enter a valid 10-digit phone number.");
-                hideLoader();
-                return;
-            }
+    // ---------------- Validation ----------------
+    if (!fullName || !email || !phone || !password || !confirmPassword) {
+        alert("Please fill in all fields.");
+        hideLoader();
+        return;
+    }
+    if (password !== confirmPassword) {
+        alert("Passwords do not match.");
+        hideLoader();
+        return;
+    }
+    if (password.length < 6) {
+        alert("Password must be at least 6 characters.");
+        hideLoader();
+        return;
+    }
+    if (!/^[0-9]{10}$/.test(phone)) {
+        alert("Enter a valid 10-digit phone number.");
+        hideLoader();
+        return;
+    }
 
-            try {
-                // Create user in Firebase Auth
-                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                const user = userCredential.user;
+    try {
+        // Create user in Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
 
-                // ✅ Ensure user.uid is ready before saving to DB
-                onAuthStateChanged(auth, async (currentUser) => {
-                    if (currentUser) {
-                        await set(ref(db, "User_Registration/" + currentUser.uid), {
-                            Name: fullName,
-                            Email: email,
-                            PhoneNumber: phone
-                        });
-
-                        alert("Registration successful 🎉 Please login now.");
-                        registerForm.reset();
-
-                        // Sign out immediately so user stays on login page
-                        await signOut(auth);
-
-                        // Switch to login tab automatically
-                        document.getElementById("login-tab").click();
-
-                        hideLoader();
-                    }
-                });
-
-            } catch (error) {
-                console.error(error.message);
-                alert("Error: " + error.message);
-                hideLoader();
-            }
+        // ✅ Save user data in Realtime Database
+        await set(ref(db, "User_Registration/" + user.uid), {
+            Name: fullName,
+            Email: email,
+            PhoneNumber: phone
         });
+
+        alert("Registration successful 🎉 Please login now.");
+        registerForm.reset();
+
+        // ✅ Sign out so user stays on login page
+        await signOut(auth);
+
+        // ✅ Switch to login tab
+        document.getElementById("login-tab").click();
+
+    } catch (error) {
+        console.error(error.message);
+        alert("Error: " + error.message);
+    } finally {
+        hideLoader();
+    }
+});
 
         // ---------------- Login ----------------
         loginForm.addEventListener("submit", async (e) => {
@@ -272,3 +267,4 @@
 </body>
 
 </html>
+

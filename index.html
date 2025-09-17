@@ -152,11 +152,22 @@
         const showLoader = () => loader && (loader.style.display = "flex");
         const hideLoader = () => loader && (loader.style.display = "none");
 
+        // ---------------- Guard while registering ----------------
+        // This prevents onAuthStateChanged redirect from firing while we are creating user & saving DB
+        let isRegistering = false;
+
         // ---------------- Auto Redirect if Already Logged In ----------------
+        // Only redirect if user is logged in AND not currently registering AND not on auth page
         onAuthStateChanged(auth, (user) => {
-            if (user && !window.location.href.includes("index.html")) {
-                // Only redirect if not on login/register page
-                window.location.href = "user_home_page.html";
+            try {
+                const isOnAuthPage = !!document.getElementById("loginForm") || !!document.getElementById("registerForm");
+                if (user && !isRegistering && !isOnAuthPage) {
+                    // only redirect when user is NOT on the login/register page
+                    window.location.href = "user_home_page.html";
+                }
+            } catch (e) {
+                // fallback: do nothing
+                console.error("onAuthStateChanged handler error:", e);
             }
         });
 
@@ -194,35 +205,49 @@
             }
 
             try {
-                // Create user in Firebase Auth
+                // Prevent onAuthStateChanged redirect while we register & save DB
+                isRegistering = true;
+
+                // Create user in Firebase Auth (this automatically signs them in)
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
 
-                // ✅ Ensure user.uid is ready before saving to DB
-                onAuthStateChanged(auth, async (currentUser) => {
-                    if (currentUser) {
-                        await set(ref(db, "User_Registration/" + currentUser.uid), {
-                            Name: fullName,
-                            Email: email,
-                            PhoneNumber: phone
-                        });
+                try {
+                    // ✅ Save user data in Realtime Database
+                    await set(ref(db, "User_Registration/" + user.uid), {
+                        Name: fullName,
+                        Email: email,
+                        PhoneNumber: phone
+                    });
 
-                        alert("Registration successful 🎉 Please login now.");
-                        registerForm.reset();
+                    alert("Registration successful 🎉 Please login now.");
+                    registerForm.reset();
 
-                        // Sign out immediately so user stays on login page
-                        await signOut(auth);
+                    // ✅ Sign out so user stays on login page
+                    await signOut(auth);
 
-                        // Switch to login tab automatically
-                        document.getElementById("login-tab").click();
+                    // ✅ Switch to login tab
+                    document.getElementById("login-tab").click();
 
-                        hideLoader();
+                } catch (dbError) {
+                    console.error("Failed to save user to DB:", dbError);
+
+                    // If DB write fails, try to delete the newly created auth user to avoid orphan accounts
+                    try {
+                        await user.delete();
+                        alert("Registration failed while saving user data. Account was removed. Please try again.");
+                    } catch (delError) {
+                        console.error("Failed to delete newly created auth user:", delError);
+                        alert("Registration failed while saving user data. Please contact support.");
                     }
-                });
-
-            } catch (error) {
-                console.error(error.message);
-                alert("Error: " + error.message);
+                }
+            } catch (authError) {
+                // e.g. email already in use, weak password, network error
+                console.error("Auth error:", authError);
+                alert("Error: " + (authError.message || authError));
+            } finally {
+                // allow onAuthStateChanged to work normally again
+                isRegistering = false;
                 hideLoader();
             }
         });
@@ -265,9 +290,6 @@
             }
         });
     </script>
-
-
-
 
 </body>
 
